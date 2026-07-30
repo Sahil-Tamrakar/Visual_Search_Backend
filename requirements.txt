@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+torch
+transformers
+faiss-cpu
+pillow
+python-multipart
+numpy
+streamlit
+pandas
+requests
