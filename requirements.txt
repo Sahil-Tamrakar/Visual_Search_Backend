@@ -1,11 +1,11 @@
 fastapi
-uvicorn[standard]
+uvicorn
 torch
 transformers
 faiss-cpu
 pillow
 python-multipart
 numpy
-streamlit
-pandas
 requests
+accelerate
+python-dotenv

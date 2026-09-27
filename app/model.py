@@ -1,27 +1,55 @@
 import torch
-from transformers import CLIPModel, CLIPProcessor
+from transformers import CLIPVisionModelWithProjection, CLIPImageProcessor
 from PIL import Image
 from .config import MODEL_NAME
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model = CLIPModel.from_pretrained(MODEL_NAME).to(device)
-processor = CLIPProcessor.from_pretrained(MODEL_NAME)
+# Render free instance is CPU-only.
+device = torch.device("cpu")
+
+# Reduce unnecessary CPU/thread overhead.
+torch.set_num_threads(1)
+
+print("Loading CLIP vision model...")
+
+# Load ONLY the vision side of CLIP.
+# We don't need CLIP's text encoder for image-to-image search.
+model = CLIPVisionModelWithProjection.from_pretrained(
+    MODEL_NAME,
+    low_cpu_mem_usage=True
+)
+
 model.eval()
+model.to(device)
+
+processor = CLIPImageProcessor.from_pretrained(MODEL_NAME)
+
+print("CLIP vision model loaded.")
+
 
 def get_image_embedding(image: Image.Image):
+
     image = image.convert("RGB")
-    inputs = processor(images=image, return_tensors="pt").to(device)
-    with torch.no_grad():
-        output = model.get_image_features(**inputs)
 
-    if isinstance(output, torch.Tensor):
-        embedding = output
-    elif hasattr(output, "image_embeds"):
-        embedding = output.image_embeds
-    elif hasattr(output, "pooler_output"):
-        embedding = output.pooler_output
-    else:
-        raise ValueError(f"Unexpected output type: {type(output)}")
+    inputs = processor(
+        images=image,
+        return_tensors="pt"
+    )
 
-    embedding = embedding / embedding.norm(dim=-1, keepdim=True)
+    pixel_values = inputs["pixel_values"].to(device)
+
+    # inference_mode uses less overhead than normal gradient execution
+    with torch.inference_mode():
+
+        outputs = model(
+            pixel_values=pixel_values
+        )
+
+        embedding = outputs.image_embeds
+
+    # Normalize embedding for similarity search
+    embedding = embedding / embedding.norm(
+        dim=-1,
+        keepdim=True
+    )
+
     return embedding.cpu().numpy().flatten()
